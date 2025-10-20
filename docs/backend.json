@@ -1,0 +1,189 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the Cognitive Mindmap Assistant application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the user account was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "createdAt"
+      ]
+    },
+    "MindMap": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MindMap",
+      "type": "object",
+      "description": "Represents a mind map created by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the mind map entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who created this mind map. (Relationship: User 1:N MindMap)"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the mind map."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the mind map was created.",
+          "format": "date-time"
+        },
+        "mapData": {
+          "type": "string",
+          "description": "JSON string representing the mind map data, conforming to the schema/map-export-v1.json schema."
+        },
+        "isSaved": {
+          "type": "boolean",
+          "description": "Indicates if the mindmap has been saved by the user."
+        },
+        "nodeCount": {
+          "type": "number",
+          "description": "The total number of nodes in the mind map."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "title",
+        "createdAt",
+        "mapData",
+        "isSaved"
+      ]
+    },
+    "Note": {
+      "title": "Note",
+      "type": "object",
+      "description": "A user-created note associated with a specific node in a mind map.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the note."
+        },
+        "nodeId": {
+          "type": "string",
+          "description": "The ID of the mind map node this note is attached to."
+        },
+        "content": {
+          "type": "string",
+          "description": "The text content of the note."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the note was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the note was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "nodeId",
+        "content",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous",
+      "google.com"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profile information. This collection contains user data. The `userId` parameter corresponds to the Firebase Auth UID.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, matching the Firebase Auth UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/mindmaps/{mindmapId}",
+        "definition": {
+          "entityName": "MindMap",
+          "schema": {
+            "$ref": "#/backend/entities/MindMap"
+          },
+          "description": "Stores mind map data for a specific user. Includes denormalized 'userId' field for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user who owns the mind map."
+            },
+            {
+              "name": "mindmapId",
+              "description": "The unique identifier for the mind map."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/mindmaps/{mindmapId}/notes/{noteId}",
+        "definition": {
+          "entityName": "Note",
+          "schema": {
+            "$ref": "#/backend/entities/Note"
+          },
+          "description": "Stores user-created notes for specific nodes within a mind map.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user who owns the mind map."
+            },
+            {
+              "name": "mindmapId",
+              "description": "The unique identifier for the mind map."
+            },
+            {
+              "name": "noteId",
+              "description": "The unique identifier for the note, often matching the nodeId."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure authorization independence, clarity, and scalability for the Cognitive Mindmap Assistant application. It leverages path-based ownership for user-specific data and denormalization to avoid complex security rules with `get()` calls. \n\n1.  **Authorization Independence:** MindMaps are stored under `/users/{userId}/mindmaps/{mindmapId}`. The `MindMap` document itself contains the `userId` field, effectively denormalizing the ownership information. This allows security rules to validate ownership based solely on the document content and the `request.auth.uid`, without needing to fetch the user document. This prevents broken atomic operations.\n\n2.  **Structural Segregation:** All mindmaps within the `/users/{userId}/mindmaps` collection share the same security requirements (owned by the user). This simplifies rules since we don't need to distinguish between public/private mindmaps within the same collection. The same principle applies to notes, which are stored in a subcollection under each mind map.\n\n3.  **Access Modeling:**\n    *   Private Data: Using `/users/{userId}/mindmaps/{mindmapId}` represents private, user-owned data. This path-based ownership model simplifies security rules, making them more robust.\n\n4. **QAPs (Rules are not Filters):** The structure supports secure `list` operations. Listing documents in `/users/{userId}/mindmaps` is straightforward as the security rules only need to check if `request.auth.uid == userId`. This prevents the need for filtering data on the client-side based on authorization, which can be insecure and inefficient.\n\n5.  **Invariants:** The structure supports invariants such as ownership and timestamps. The `userId` field within the `MindMap` document explicitly captures ownership. Timestamps like `createdAt` can be enforced using security rules to ensure data integrity."
+  }
+}

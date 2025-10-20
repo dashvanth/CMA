@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 27 96% 62%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 27 96% 62%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 27 96% 62%;
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 240 14% 4%; /* Deep Space Gray: #0C0C10 */
+    --foreground: 210 40% 98%;
+    --card: 220 14% 11%; /* Charcoal Blue: #171A21 */
+    --card-foreground: 210 40% 98%;
+    --popover: 240 14% 4%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 27 96% 62%; /* Soft Amber Orange: #FF8A3D */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 14% 11%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 220 14% 11%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 27 96% 62%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 14% 20%;
+    --input: 220 14% 20%;
+    --ring: 27 96% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+    .glass-panel {
+        @apply bg-card/60 border border-white/10 rounded-2xl shadow-2xl shadow-black/20;
+        backdrop-filter: blur(20px) saturate(140%) contrast(110%);
+    }
+    .dark .glass-panel {
+        @apply bg-card/60 border border-white/10;
+    }
+    .light .glass-panel {
+        @apply bg-card/80 border border-black/10;
+    }
+
+    .bg-grid-pattern {
+        background-image:
+            linear-gradient(hsl(var(--border)) 1px, transparent 1px),
+            linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px);
+        background-size: 40px 40px;
+    }
+    .accent-glow {
+        box-shadow: 0 0 20px 2px hsl(var(--accent) / 0.7), 0 0 8px hsl(var(--accent) / 0.5);
+    }
+    .text-reveal-from-light {
+        animation: reveal-from-light 2s ease-out forwards;
+    }
+    .fade-in {
+        animation: fade-in 1s ease-out forwards;
+    }
+    .synaptic-pulse {
+        stroke-dasharray: 1000;
+        stroke-dashoffset: 1000;
+        animation: pulse-draw 2.5s ease-out forwards;
+    }
+}
+
+@keyframes reveal-from-light {
+    0% {
+        opacity: 0;
+        text-shadow: 0 0 30px hsl(var(--accent)), 0 0 15px white;
+        transform: scale(1.05);
+    }
+    50% {
+        opacity: 0.8;
+        text-shadow: 0 0 30px hsl(var(--accent)), 0 0 15px white;
+        transform: scale(1.05);
+    }
+    100% {
+        opacity: 1;
+        text-shadow: none;
+        transform: scale(1);
+    }
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes drift-particles {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(10px, 15px); }
+  50% { transform: translate(-10px, -5px); }
+  75% { transform: translate(5px, -10px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes pulse-draw {
+    to {
+        stroke-dashoffset: 0;
+    }
+}

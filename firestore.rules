@@ -1,0 +1,125 @@
+/**
+ * @file Firestore Security Rules for Cognitive Mindmap Assistant
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for all data. Each user has full control over their own data tree, and no access to other users' data.
+ *
+ * Data Structure:
+ * Data is nested under /users/{userId}, with further subcollections for mindmaps and notes. This structure ensures clear ownership and simplifies security rules.
+ *
+ * Key Security Decisions:
+ * - Users can only access their own data.
+ * - Data ownership is enforced by matching the authenticated user's UID to the userId path parameter and the userId field within documents.
+ * - Listing other users' data is strictly forbidden.
+ *
+ * Denormalization for Authorization:
+ * The 'MindMap' entity contains a denormalized 'userId' field. This is CRITICAL for authorization, allowing rules to validate ownership without extra `get()` calls.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Root-level read protection.  No direct reads are allowed at the database root.
+     * @path /databases/{database}/documents
+     * @allow (get, list) false
+     * @deny (get, list) Always, as this is the database root.
+     * @principle Prevents unintended access to the entire database.
+     */
+    match /{document=**} {
+      allow get: if false;
+      allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    /**
+     * @description Rules for the /users collection.  Allows a user to create their own profile, and only allows access to their own profile data.
+     * @path /users/{userId}
+     * @allow (create) A user can create their own profile if the userId matches their auth UID. Example: auth.uid == "user123" creates /users/user123
+     * @allow (get, update, delete) A user can get, update, and delete their own profile if the userId matches their auth UID.  Example: auth.uid == "user123" accesses /users/user123
+     * @deny (get, update, delete) A user cannot access another user's profile. Example: auth.uid == "user456" cannot access /users/user123
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId} {
+      // Helper function to check if the user is signed in and owns the resource.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Rules for the /users/{userId}/mindmaps collection.  Allows a user to manage their own mindmaps.
+     * @path /users/{userId}/mindmaps/{mindmapId}
+     * @allow (create) A user can create a mindmap under their own user ID. Example: auth.uid == "user123" creates /users/user123/mindmaps/map456
+     * @allow (get, list, update, delete) A user can get, list, update, and delete their own mindmaps. Example: auth.uid == "user123" accesses /users/user123/mindmaps/map456
+     * @deny (get, list, update, delete) A user cannot access another user's mindmaps. Example: auth.uid == "user456" cannot access /users/user123/mindmaps/map456
+     * @principle Enforces document ownership and validates data consistency.
+     */
+    match /users/{userId}/mindmaps/{mindmapId} {
+       // Helper function to check if the user is signed in and owns the resource.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Rules for the /users/{userId}/mindmaps/{mindmapId}/notes collection. Allows a user to manage notes within their own mindmaps.
+     * @path /users/{userId}/mindmaps/{mindmapId}/notes/{noteId}
+     * @allow (create) A user can create a note under their own mindmap. Example: auth.uid == "user123" creates /users/user123/mindmaps/map456/notes/note789
+     * @allow (get, list, update, delete) A user can get, list, update, and delete their own notes. Example: auth.uid == "user123" accesses /users/user123/mindmaps/map456/notes/note789
+     * @deny (get, list, update, delete) A user cannot access another user's notes. Example: auth.uid == "user456" cannot access /users/user123/mindmaps/map456/notes/note789
+     * @principle Enforces document ownership and validates data consistency.
+     */
+    match /users/{userId}/mindmaps/{mindmapId}/notes/{noteId} {
+       // Helper function to check if the user is signed in and owns the resource.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+  }
+}
