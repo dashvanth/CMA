@@ -5,7 +5,6 @@ export interface HierarchicalMapNode {
   parentId?: string;
 }
 
-
 export interface MapNode {
   nodeId: string;
   label: string;
@@ -55,7 +54,6 @@ export interface GenerateMindMapOutput {
   nodeCount?: number;
 }
 
-
 export interface MindMapData extends GenerateMindMapOutput {
   root: HierarchicalMapNode;
 }
@@ -66,4 +64,11 @@ export interface Note {
   content: string;
   createdAt: string;
   updatedAt: string;
+}
+export interface SummarizeSelectedNodeOutput {
+  nodeId: string;
+  tl_dr: string;
+  detailed: string;
+  analogy: string;
+  imageUrl: string | null; // 💡 ADDED FIELD for AI-generated image
 }
