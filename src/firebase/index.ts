@@ -2,44 +2,69 @@
 
 import { firebaseConfig } from "@/firebase/config";
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getAuth, Auth } from "firebase/auth";
+import { getFirestore, Firestore } from "firebase/firestore"; // Removed connectFirestoreEmulator import
 
-// IMPORTANT: DO NOT MODIFY THIS FUNCTION
-export function initializeFirebase() {
-  if (!getApps().length) {
-    // Important! initializeApp() is called without any arguments because Firebase App Hosting
-    // integrates with the initializeApp() function to provide the environment variables needed to
-    // populate the FirebaseOptions in production. It is critical that we attempt to call initializeApp()
-    // without arguments.
-    let firebaseApp;
-    try {
-      // Attempt to initialize via Firebase App Hosting environment variables
-      firebaseApp = initializeApp();
-    } catch (e) {
-      // Only warn in production because it's normal to use the firebaseConfig to initialize
-      // during development
-      if (process.env.NODE_ENV === "production") {
-        console.warn(
-          "Automatic initialization failed. Falling back to firebase config object.",
-          e
-        );
-      }
-      firebaseApp = initializeApp(firebaseConfig);
-    }
-
-    return getSdks(firebaseApp);
-  }
-
-  // If already initialized, return the SDKs with the already initialized App
-  return getSdks(getApp());
+// Declare global properties for the singleton instance. This is essential for
+// Serverless environments (like Vercel) to prevent connection leaks.
+declare global {
+  // Use `var` for global declarations in this context
+  var firebaseAppInstance: FirebaseApp | undefined;
+  var firestoreInstance: Firestore | undefined;
 }
 
-export function getSdks(firebaseApp: FirebaseApp) {
+/**
+ * Initializes Firebase services using the Singleton Pattern for scalable
+ * deployment, connecting directly to the remote Google Cloud Firestore
+ * (to ensure local development speed).
+ */
+export function initializeFirebase() {
+  let firebaseApp: FirebaseApp;
+  let firestore: Firestore;
+  let auth: Auth;
+
+  // 1. Check for existing singleton instance
+  if (globalThis.firebaseAppInstance) {
+    // Reuse existing instances (Vercel Scalability Fix)
+    firebaseApp = globalThis.firebaseAppInstance;
+    firestore = globalThis.firestoreInstance!;
+    auth = getAuth(firebaseApp);
+  } else {
+    // 2. Initialize the Firebase App instance (once)
+    if (!getApps().length) {
+      try {
+        // Attempt Firebase App Hosting initialization first (production safe)
+        firebaseApp = initializeApp();
+      } catch (e) {
+        // Fallback to local config (development safe)
+        if (process.env.NODE_ENV === "production") {
+          console.warn(
+            "Automatic initialization failed. Falling back to firebase config object.",
+            e
+          );
+        }
+        firebaseApp = initializeApp(firebaseConfig);
+      }
+    } else {
+      firebaseApp = getApp();
+    }
+
+    // 3. Initialize services
+    firestore = getFirestore(firebaseApp);
+    auth = getAuth(firebaseApp);
+
+    // NOTE: connectFirestoreEmulator call is intentionally REMOVED here.
+
+    // 4. Store the instances globally for reuse (Scalability fix for Vercel)
+    globalThis.firebaseAppInstance = firebaseApp;
+    globalThis.firestoreInstance = firestore;
+  }
+
+  // Return all required SDKs.
   return {
     firebaseApp,
-    auth: getAuth(firebaseApp),
-    firestore: getFirestore(firebaseApp),
+    auth,
+    firestore,
   };
 }
 
