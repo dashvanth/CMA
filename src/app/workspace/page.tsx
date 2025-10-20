@@ -11,7 +11,6 @@ import type {
 import { InputPanel } from "@/components/cma/InputPanel";
 import { SummaryPanel } from "@/components/cma/SummaryPanel";
 import { MindMap } from "@/components/cma/MindMap";
-import { AIPersona } from "@/components/cma/AIPersona";
 import { Header } from "@/components/cma/Header";
 import { generateMindMapFromInput } from "@/ai/flows/generate-mind-map-from-input";
 import {
@@ -503,7 +502,6 @@ function WorkspaceContent() {
           mindMapData={mindMapData}
         />
       </div>
-      <AIPersona />
     </div>
   );
 }
