@@ -20,12 +20,15 @@ import {
   X,
   Loader2,
   Pencil,
-  VolumeX, // Imported VolumeX for the stop state
+  VolumeX,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SummarizeSelectedNodeOutput } from "@/ai/flows/summarize-selected-node";
 import { SaveNoteDialog } from "./SaveNoteDialog";
 import { useTTS } from "@/hooks/use-tts";
+import { useEffect } from "react";
 
 interface SummaryPanelProps {
   node: HierarchicalMapNode | null;
@@ -34,6 +37,13 @@ interface SummaryPanelProps {
   onNodeSelect: (node: HierarchicalMapNode | null) => void;
   note?: Note;
   mindMapData: MindMapData | null;
+  // --- Props for Presentation Mode ---
+  isPresentationMode: boolean;
+  goToNext: () => void;
+  goToPrevious: () => void;
+  currentPresentationIndex: number;
+  totalNodes: number;
+  setIsSpeaking: (isSpeaking: boolean) => void; // Sync TTS state to parent
 }
 
 export function SummaryPanel({
@@ -43,32 +53,53 @@ export function SummaryPanel({
   onNodeSelect,
   note,
   mindMapData,
+  isPresentationMode,
+  goToNext,
+  goToPrevious,
+  currentPresentationIndex,
+  totalNodes,
+  setIsSpeaking,
 }: SummaryPanelProps) {
   const glassEffect = "bg-card/60 backdrop-blur-xl border-border";
-  // TTS Hook Initialization
   const { isTTSAvailable, isSpeaking, speak, stop } = useTTS();
 
+  // Sync TTS state up to the parent component for auto-advance logic
+  useEffect(() => {
+    setIsSpeaking(isSpeaking);
+  }, [isSpeaking, setIsSpeaking]);
+
   const handleNarrate = () => {
-    if (!summary) return;
+    if (!summary || !node?.label) return;
 
     if (isSpeaking) {
       stop();
-      return;
+    } else {
+      const fullText = `Node: ${node.label}. TL;DR: ${summary.tl_dr}. Detailed summary: ${summary.detailed}. Analogy: ${summary.analogy}.`;
+      speak(fullText);
     }
-
-    // Concatenate the summaries for a full narration
-    const fullText = `Node: ${node?.label}. TL;DR: ${summary.tl_dr}. Detailed summary: ${summary.detailed}. Analogy: ${summary.analogy}.`;
-    speak(fullText);
   };
 
-  // Determine if narration should be disabled (no summary OR TTS not available)
   const isNarrationDisabled = !summary || !isTTSAvailable;
+
+  // Effect to Autoplay Narration in Presentation Mode
+  useEffect(() => {
+    stop();
+
+    if (isPresentationMode && summary && !isLoadingSummary) {
+      const timer = setTimeout(() => {
+        if (!isSpeaking) {
+          handleNarrate();
+        }
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isPresentationMode, summary, isLoadingSummary]);
 
   return (
     <div
       className={cn(
         `w-96 shrink-0 h-full transition-transform duration-500 ease-in-out`,
-        // Use translate-x-full for cleaner hiding, assuming the parent container allows it.
         !node ? "translate-x-full" : "translate-x-0"
       )}
     >
@@ -159,23 +190,21 @@ export function SummaryPanel({
 
               <div className="mt-auto pt-4 space-y-2">
                 <Separator />
+
                 <div className="flex gap-2">
                   <button
-                    // FIX: Moved onClick and disabled attributes inside the tag
                     onClick={handleNarrate}
-                    disabled={isNarrationDisabled}
+                    disabled={isNarrationDisabled || isPresentationMode}
                     className={cn(
                       "flex-1 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 w-full",
                       isSpeaking
-                        ? "bg-accent text-accent-foreground hover:bg-accent/90" // Accent color when speaking
-                        : "border border-input bg-background hover:bg-accent hover:text-accent-foreground" // Default style
+                        ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                        : "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
                     )}
                   >
                     {isSpeaking ? (
-                      // Show the stop icon when speaking
                       <VolumeX className="mr-2 h-4 w-4" />
                     ) : (
-                      // Show the volume icon otherwise
                       <Volume2 className="mr-2 h-4 w-4" />
                     )}
                     {isSpeaking ? "Stop Narrating" : "Narrate Summary"}
@@ -192,6 +221,34 @@ export function SummaryPanel({
                     </button>
                   </SaveNoteDialog>
                 </div>
+
+                {/* Presentation Navigation Controls */}
+                {isPresentationMode && (
+                  <div className="flex gap-2 justify-between items-center p-3 rounded-lg border border-border bg-card">
+                    <button
+                      onClick={goToPrevious}
+                      disabled={currentPresentationIndex === 0}
+                      className="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 hover:bg-muted"
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-2" /> Previous
+                    </button>
+                    <span className="text-sm font-semibold text-foreground">
+                      Node {currentPresentationIndex + 1} of {totalNodes}
+                    </span>
+                    <button
+                      onClick={goToNext}
+                      disabled={currentPresentationIndex === totalNodes - 1}
+                      className="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-accent hover:bg-accent/90 text-primary-foreground"
+                    >
+                      {currentPresentationIndex < totalNodes - 1
+                        ? "Next Node"
+                        : "Finish"}
+                      <ChevronRight className="h-4 w-4 ml-2" />
+                    </button>
+                  </div>
+                )}
+
+                {/* User Feedback Buttons */}
                 <div className="text-center text-xs text-muted-foreground pt-2">
                   Feedback
                 </div>

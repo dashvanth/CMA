@@ -1,26 +1,36 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
-  File as FileIcon,
-  Mic,
-  Sparkles,
+  Download,
+  Save,
+  FileJson,
+  FileImage,
+  Sheet,
+  FileText,
   Loader2,
+  Presentation,
+  StopCircle,
+  Sparkles, // FIX: Imported Sparkles
+  Mic,
+  File as FileIcon,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
-import { MindMapControls } from "./MindMapControls";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MindMapData } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { Textarea } from "../ui/textarea";
+import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
+import { Label } from "../ui/label";
+import { Input } from "../ui/input";
+import { useState, useRef } from "react"; // FIX: Imported useState and useRef
+import { useToast } from "@/hooks/use-toast";
+import { Separator } from "../ui/separator";
 
 interface InputPanelProps {
   onGenerate: (payload: string) => void;
@@ -31,29 +41,45 @@ interface InputPanelProps {
   isUploading: boolean;
   isSaving: boolean;
   mindMapData: MindMapData | null;
+  // --- PRESENTATION MODE PROPS ---
+  isPresentationMode: boolean;
+  onTogglePresentation: () => void;
 }
 
-export function InputPanel({ 
-  onGenerate, 
-  onPdfUpload, 
+export function InputPanel({
+  onGenerate,
+  onPdfUpload,
   onExport,
   onSave,
-  isGenerating, 
+  isGenerating,
   isUploading,
   isSaving,
   mindMapData,
+  isPresentationMode,
+  onTogglePresentation,
 }: InputPanelProps) {
-  const [inputText, setInputText] = useState("");
+  const [textInput, setTextInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const isAnyActionPending = isGenerating || isUploading || isSaving;
+  const isMindMapPresent = !!mindMapData;
   const isLoading = isGenerating || isUploading;
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setTextInput(e.target.value);
+  };
+
+  const handleGenerateClick = () => {
+    if (textInput.trim()) {
+      onGenerate(textInput);
+    }
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    
-    if (!file) {
-      return;
-    }
+
+    if (!file) return;
 
     if (file.type !== "application/pdf") {
       toast({
@@ -61,9 +87,7 @@ export function InputPanel({
         title: "Invalid File Type",
         description: "Please select a PDF file.",
       });
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
@@ -71,71 +95,64 @@ export function InputPanel({
     formData.append("file", file);
     onPdfUpload(formData);
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const glassEffect = "bg-card/60 backdrop-blur-xl border-border";
-
   return (
-    <Card
-      className={`w-96 h-full flex flex-col shrink-0 ${glassEffect} shadow-2xl shadow-black/20`}
-    >
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 font-headline">
-          <Sparkles className="text-accent" />
-          <span>Generator</span>
-        </CardTitle>
-        <CardDescription>
-          Create a new mind map from text, PDF, or your voice.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-4 overflow-y-auto">
-        <div className="grid w-full gap-1.5 flex-1">
-          <Label htmlFor="message">Input</Label>
-          <Textarea
-            placeholder="Paste your text, notes, or article here..."
-            id="message"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            className="min-h-48 flex-1 bg-input/50 resize-none"
-            disabled={isLoading}
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={() => onGenerate(inputText)}
-            disabled={isLoading || !inputText}
-          >
-            {isGenerating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-2 h-4 w-4" />
-            )}
-            {isGenerating ? "Generating..." : "Generate from Text"}
-          </Button>
-        </div>
-
-        <Separator className="my-2" />
-
-        <div className="space-y-2">
-            <Label>From File</Label>
+    <div className="w-96 shrink-0 h-full flex flex-col gap-4">
+      <Card className="flex-1 flex flex-col">
+        <CardHeader>
+          <CardTitle>Generate New Map</CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col gap-4">
+          <div className="flex-1">
+            <Label htmlFor="text-input" className="mb-2 block">
+              Enter Text or Upload PDF
+            </Label>
+            <Textarea
+              id="text-input"
+              placeholder="Paste text here to generate a mind map..."
+              value={textInput}
+              onChange={handleTextareaChange}
+              rows={8}
+              disabled={isAnyActionPending || isPresentationMode}
+            />
+            <Button
+              className="w-full mt-2"
+              onClick={handleGenerateClick}
+              disabled={
+                !textInput.trim() || isAnyActionPending || isPresentationMode
+              }
+            >
+              {isGenerating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              {isGenerating ? "Generating..." : "Generate from Text"}
+            </Button>
+          </div>
+          <Separator />
+          {/* PDF UPLOAD SECTION */}
+          <div className="space-y-2">
+            <Label htmlFor="pdf-file" className="mb-2 block">
+              Upload PDF File
+            </Label>
             <input
+              id="pdf-file"
               type="file"
+              name="file"
               ref={fileInputRef}
               onChange={handleFileChange}
               className="hidden"
               accept=".pdf"
-              disabled={isLoading}
+              disabled={isAnyActionPending || isPresentationMode}
             />
             <Button
               variant="outline"
               className="w-full"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
+              disabled={isAnyActionPending || isPresentationMode}
             >
               {isUploading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -144,22 +161,94 @@ export function InputPanel({
               )}
               {isUploading ? "Uploading..." : "Upload PDF"}
             </Button>
-        </div>
-        
-        <div className="flex gap-2 mt-auto">
-          <Button variant="outline" className="flex-1" disabled={isLoading}>
-            <Mic className="mr-2 h-4 w-4" /> Use Voice
-          </Button>
-        </div>
+          </div>
 
-      </CardContent>
-      <MindMapControls 
-        onExport={onExport}
-        onSave={onSave}
-        isSaving={isSaving}
-        mindMapData={mindMapData}
-        isLoading={isLoading}
-      />
-    </Card>
+          <div className="flex gap-2 mt-auto">
+            {/* Keeping the Mic button as a placeholder for future voice command features */}
+            <Button variant="outline" className="flex-1" disabled={isLoading}>
+              <Mic className="mr-2 h-4 w-4" /> Use Voice
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* MindMapControls logic is inlined here */}
+      {isMindMapPresent && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex gap-2 mb-2">
+              {/* PRESENTATION BUTTON */}
+              <Button
+                variant={isPresentationMode ? "destructive" : "secondary"}
+                className={cn(
+                  "w-full",
+                  isPresentationMode && "bg-destructive hover:bg-destructive/90"
+                )}
+                onClick={onTogglePresentation}
+                disabled={isAnyActionPending}
+              >
+                {isPresentationMode ? (
+                  <StopCircle className="mr-2 h-4 w-4" />
+                ) : (
+                  <Presentation className="mr-2 h-4 w-4" />
+                )}
+                {isPresentationMode ? "Exit Presentation" : "Present Mode"}
+              </Button>
+
+              {/* SAVE BUTTON */}
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={onSave}
+                disabled={!isMindMapPresent || isSaving || isAnyActionPending}
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                {isSaving
+                  ? "Saving..."
+                  : mindMapData?.isSaved
+                  ? "Saved"
+                  : "Save"}
+              </Button>
+            </div>
+
+            {/* EXPORT DROPDOWN */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={isAnyActionPending}
+                >
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56">
+                <DropdownMenuItem onSelect={() => onExport("png")}>
+                  <FileImage className="mr-2 h-4 w-4" />
+                  <span>PNG</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onExport("pdf")}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>PDF</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onExport("json")}>
+                  <FileJson className="mr-2 h-4 w-4" />
+                  <span>JSON</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onExport("csv")}>
+                  <Sheet className="mr-2 h-4 w-4" />
+                  <span>CSV</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }

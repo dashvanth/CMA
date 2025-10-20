@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, Suspense } from "react";
+import { useState, useCallback, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type {
   HierarchicalMapNode,
@@ -24,8 +24,9 @@ import jsPDF from "jspdf";
 import { convertMapToCsv } from "@/ai/flows/convert-map-to-csv";
 import * as pdfjsLib from "pdfjs-dist";
 import { useFirebase, useMemoFirebase, useDoc, useNotes } from "@/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import * as d3 from "d3-hierarchy";
 
 if (typeof window !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
@@ -122,6 +123,11 @@ function WorkspaceContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
+  // 💡 PRESENTATION MODE STATE
+  const [isPresentationMode, setIsPresentationMode] = useState(false);
+  const [currentPresentationIndex, setCurrentPresentationIndex] = useState(0);
+  const [isSpeaking, setIsSpeaking] = useState(false); // State synced from SummaryPanel (TTS hook)
+
   const docRef = useMemoFirebase(() => {
     if (!firestore || !user?.uid || !mapId) return null;
     return doc(firestore, `users/${user.uid}/mindmaps`, mapId);
@@ -129,6 +135,15 @@ function WorkspaceContent() {
 
   const { data: fetchedMapData, isLoading: isLoadingMap } = useDoc(docRef);
   const { data: notes } = useNotes(user?.uid, mindMapData?.mapId);
+
+  // 💡 DERIVED STATE: ORDERED NODES for Presentation
+  const orderedNodes = useMemo(() => {
+    if (!mindMapData?.root) return [];
+
+    // Use D3 to create a hierarchy and get all nodes in depth-first order
+    const hierarchy = d3.hierarchy(mindMapData.root, (d) => d.children || []);
+    return hierarchy.descendants().map((d) => d.data as HierarchicalMapNode);
+  }, [mindMapData]);
 
   useEffect(() => {
     if (fetchedMapData) {
@@ -178,7 +193,7 @@ function WorkspaceContent() {
         `users/${user.uid}/mindmaps`,
         mapToSave.mapId
       );
-      setDocumentNonBlocking(docRef, mapToSave, { merge: true });
+      await setDocumentNonBlocking(docRef, mapToSave, { merge: true }); // Awaiting fix added here
 
       setMindMapData((prev) => (prev ? { ...prev, isSaved: true } : null));
       return true;
@@ -217,36 +232,146 @@ function WorkspaceContent() {
     }
   };
 
-  const handleNodeSelect = useCallback(
-    async (node: HierarchicalMapNode | null) => {
-      setSelectedNode(node);
-      setSummary(null);
-
-      if (node?.id && node.label) {
-        setIsLoadingSummary(true);
-        try {
-          const result = await summarizeSelectedNode({
-            nodeId: node.id,
-            label: node.label,
-            detailLevel: "detailed",
-          });
-          setSummary(result);
-        } catch (error) {
-          console.error("Failed to generate summary:", error);
-          toast({
-            variant: "destructive",
-            title: "Summary Failed",
-            description:
-              "Could not generate the summary for the selected node.",
-          });
-          setSummary(null);
-        } finally {
-          setIsLoadingSummary(false);
-        }
+  const generateSummary = useCallback(
+    async (node: HierarchicalMapNode, detailLevel: "detailed" | "simplest") => {
+      if (!node) return;
+      setIsLoadingSummary(true);
+      try {
+        const result = await summarizeSelectedNode({
+          nodeId: node.id,
+          label: node.label,
+          detailLevel: detailLevel,
+        });
+        setSummary(result);
+        return result;
+      } catch (error) {
+        console.error("Failed to generate summary:", error);
+        toast({
+          variant: "destructive",
+          title: "Summary Failed",
+          description: "Could not generate the summary for the selected node.",
+        });
+        setSummary(null);
+      } finally {
+        setIsLoadingSummary(false);
       }
     },
     [toast]
   );
+
+  const handleNodeSelect = useCallback(
+    async (node: HierarchicalMapNode | null) => {
+      // 💡 LOGIC: Manual selection should exit Presentation Mode
+      if (isPresentationMode) {
+        setTimeout(() => setIsPresentationMode(false), 50);
+      }
+
+      setSelectedNode(node);
+      setSummary(null);
+
+      if (node?.id && node.label) {
+        await generateSummary(node, "detailed");
+      }
+    },
+    [generateSummary, isPresentationMode]
+  );
+
+  // -----------------------------------------------------------
+  // 💡 PRESENTATION MODE HANDLERS AND EFFECTS
+  // -----------------------------------------------------------
+
+  const handleStopPresentation = useCallback(() => {
+    setIsPresentationMode(false);
+    setCurrentPresentationIndex(0);
+    setSelectedNode(null);
+    toast({
+      title: "Presentation Ended",
+      description: "You have reviewed all nodes in the mind map.",
+    });
+  }, [toast]);
+
+  const handleTogglePresentation = useCallback(() => {
+    if (isPresentationMode) {
+      handleStopPresentation();
+    } else {
+      if (orderedNodes.length > 0) {
+        setCurrentPresentationIndex(0);
+        setIsPresentationMode(true);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Start Failed",
+          description: "No mind map loaded to present.",
+        });
+      }
+    }
+  }, [isPresentationMode, orderedNodes.length, handleStopPresentation, toast]);
+
+  const goToNextNode = useCallback(() => {
+    if (currentPresentationIndex < orderedNodes.length - 1) {
+      setCurrentPresentationIndex((prev) => prev + 1);
+    } else {
+      handleStopPresentation();
+    }
+  }, [currentPresentationIndex, orderedNodes.length, handleStopPresentation]);
+
+  const goToPreviousNode = useCallback(() => {
+    if (currentPresentationIndex > 0) {
+      setCurrentPresentationIndex((prev) => prev - 1);
+    }
+  }, [currentPresentationIndex]);
+
+  // 💡 EFFECT 1: Handles sequential selection and summary fetching for the presentation
+  useEffect(() => {
+    if (!isPresentationMode || orderedNodes.length === 0) {
+      return;
+    }
+
+    const nodeToPresent = orderedNodes[currentPresentationIndex];
+    if (nodeToPresent && nodeToPresent.id !== selectedNode?.id) {
+      setSelectedNode(nodeToPresent);
+      setSummary(null);
+      generateSummary(nodeToPresent, "detailed");
+    }
+  }, [
+    isPresentationMode,
+    currentPresentationIndex,
+    orderedNodes,
+    generateSummary,
+    selectedNode,
+  ]);
+
+  // 💡 EFFECT 2: Auto-Advance Logic (Watches TTS state)
+  useEffect(() => {
+    // Only run if we are in presentation mode and the narration just stopped
+    if (isPresentationMode && !isSpeaking && !isLoadingSummary) {
+      // Ensure the summary that finished speaking belongs to the current selected node
+      const isCurrentNodeSummaryLoaded =
+        !!summary &&
+        orderedNodes[currentPresentationIndex]?.id === selectedNode?.id;
+
+      if (isCurrentNodeSummaryLoaded) {
+        const timer = setTimeout(() => {
+          goToNextNode();
+        }, 2000); // Wait 2 seconds (the tutorial pause)
+
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [
+    isPresentationMode,
+    isSpeaking,
+    isLoadingSummary,
+    summary,
+    currentPresentationIndex,
+    orderedNodes,
+    goToNextNode,
+    selectedNode,
+  ]);
+
+  // -----------------------------------------------------------
+  // 💡 END PRESENTATION MODE HANDLERS AND EFFECTS
+  // -----------------------------------------------------------
 
   const handleGenerate = async (payload: string) => {
     if (!payload.trim()) {
@@ -265,6 +390,8 @@ function WorkspaceContent() {
       });
       return;
     }
+
+    if (isPresentationMode) handleStopPresentation();
 
     setIsGenerating(true);
     setSelectedNode(null);
@@ -303,6 +430,8 @@ function WorkspaceContent() {
       return;
     }
 
+    if (isPresentationMode) handleStopPresentation();
+
     setIsUploading(true);
     setSelectedNode(null);
     setMindMapData(null);
@@ -312,7 +441,7 @@ function WorkspaceContent() {
       const fileBuffer = await file.arrayBuffer();
       const loadingTask = pdfjsLib.getDocument({
         data: fileBuffer,
-        cMapUrl: "/static/cmaps/",
+        cMapUrl: "/cmaps/",
         cMapPacked: true,
       });
       const pdf = await loadingTask.promise;
@@ -360,6 +489,10 @@ function WorkspaceContent() {
     const title = mindMapData.title.replace(/ /g, "_") || "mind-map";
 
     try {
+      if (isPresentationMode) {
+        handleStopPresentation();
+      }
+
       switch (format) {
         case "json":
           const jsonString = JSON.stringify(mindMapData, null, 2);
@@ -432,6 +565,8 @@ function WorkspaceContent() {
       });
       return;
     }
+    if (isPresentationMode) handleStopPresentation();
+
     const success = await handleSave(mindMapData);
     if (success) {
       toast({
@@ -457,6 +592,9 @@ function WorkspaceContent() {
           isUploading={isUploading}
           isSaving={isSaving}
           mindMapData={mindMapData}
+          // 💡 NEW PROPS PASSED TO INPUT PANEL
+          isPresentationMode={isPresentationMode}
+          onTogglePresentation={handleTogglePresentation}
         />
         <div className="flex-1 h-full rounded-2xl border border-border bg-card/20 relative overflow-hidden shadow-2xl shadow-black/20">
           {isLoading && (
@@ -500,6 +638,13 @@ function WorkspaceContent() {
           isLoadingSummary={isLoadingSummary}
           note={noteForSelectedNode}
           mindMapData={mindMapData}
+          // 💡 NEW PROPS PASSED TO SUMMARY PANEL
+          isPresentationMode={isPresentationMode}
+          goToNext={goToNextNode}
+          goToPrevious={goToPreviousNode}
+          currentPresentationIndex={currentPresentationIndex}
+          totalNodes={orderedNodes.length}
+          setIsSpeaking={setIsSpeaking} // Callback to update the parent's TTS state
         />
       </div>
     </div>
