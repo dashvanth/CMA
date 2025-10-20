@@ -1,6 +1,6 @@
-import type {NextConfig} from 'next';
-import CopyPlugin from 'copy-webpack-plugin';
-import path from 'path';
+import type { NextConfig } from "next";
+import CopyPlugin from "copy-webpack-plugin";
+import path from "path";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -13,46 +13,52 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "placehold.co",
+        port: "",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-        port: '',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        port: "",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "picsum.photos",
+        port: "",
+        pathname: "/**",
       },
     ],
   },
   webpack: (config, { isServer }) => {
     // pdfjs-dist
-    const pdfjsDistPath = path.dirname(require.resolve('pdfjs-dist/package.json'));
-    const pdfWorkerPath = path.join(pdfjsDistPath, 'build', 'pdf.worker.min.mjs');
-    const pdfcmapsPath = path.join(pdfjsDistPath, 'cmaps');
+    const pdfjsDistPath = path.dirname(
+      require.resolve("pdfjs-dist/package.json")
+    );
+    const pdfWorkerPath = path.join(
+      pdfjsDistPath,
+      "build",
+      "pdf.worker.min.mjs"
+    );
+    const pdfcmapsPath = path.join(pdfjsDistPath, "cmaps");
 
     config.plugins.push(
       new CopyPlugin({
         patterns: [
           {
             from: pdfWorkerPath,
-            to: path.join(config.output.path!, 'static', 'chunks'),
+            to: path.join(process.cwd(), "public", "pdf.worker.min.mjs"),
           },
           {
             from: pdfcmapsPath,
-            to: path.join(config.output.path!, 'static', 'cmaps'),
+            to: path.join(process.cwd(), "public", "cmaps"),
           },
         ],
-      }),
+      })
     );
-    
+
     return config;
   },
 };
