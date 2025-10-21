@@ -18,7 +18,7 @@ import {
   SummarizeSelectedNodeOutput,
 } from "@/ai/flows/summarize-selected-node";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Zap, MessageSquare } from "lucide-react"; // <-- ADDED MessageSquare
+import { Loader2, Zap, MessageSquare } from "lucide-react";
 import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
 import { convertMapToCsv } from "@/ai/flows/convert-map-to-csv";
@@ -27,8 +27,8 @@ import { useFirebase, useMemoFirebase, useDoc, useNotes } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import * as d3 from "d3-hierarchy";
-import { ChatModal } from "@/components/cma/ChatModal"; // <-- ADDED CHAT MODAL IMPORT
-import { Button } from "@/components/ui/button"; // <-- ADDED BUTTON IMPORT for floating button
+import { ChatModal } from "@/components/cma/ChatModal"; // CORRECT: ChatModal imported
+import { Button } from "@/components/ui/button";
 
 if (typeof window !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
@@ -125,10 +125,10 @@ function WorkspaceContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
-  // --- NEW STATE FOR CHATBOT FEATURE ---
+  // --- CHATBOT STATE (Reinstated) ---
   const [mindMapSourceContent, setMindMapSourceContent] = useState<string>("");
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
-  // -------------------------------------
+  // ----------------------------------
 
   // 💡 PRESENTATION MODE STATE
   const [isPresentationMode, setIsPresentationMode] = useState(false);
@@ -152,18 +152,46 @@ function WorkspaceContent() {
     return hierarchy.descendants().map((d) => d.data as HierarchicalMapNode);
   }, [mindMapData]);
 
+  // 🔥 FIX: Context Loading and Fallback Logic for Legacy Maps
   useEffect(() => {
     if (fetchedMapData) {
       try {
-        // If loaded from firestore, attempt to restore context, assuming 'sourcePayload' exists
-        // This is a placeholder as the field name is speculative.
-        // For now, we rely on new generation runs to set the context.
+        let loadedSourceContent: string = "";
+
+        // 1. Attempt to load the new sourcePayload field
         if (
           fetchedMapData.sourcePayload &&
           typeof fetchedMapData.sourcePayload === "string"
         ) {
-          setMindMapSourceContent(fetchedMapData.sourcePayload);
+          loadedSourceContent = fetchedMapData.sourcePayload;
+        } else if (fetchedMapData.mapData) {
+          // 2. FALLBACK FOR LEGACY MAPS (Fix for "Context is missing" error)
+          try {
+            const nodes = JSON.parse(fetchedMapData.mapData);
+            if (Array.isArray(nodes) && nodes.length > 0) {
+              const nodeLabels = nodes.map((n: any) => n.label).join("; ");
+              const title = fetchedMapData.title || "Mind Map Content";
+
+              // Construct minimal fallback context
+              loadedSourceContent = `Mind Map Title: ${title}. Core Concepts/Nodes: ${nodeLabels}. (NOTE: Original source document unavailable. Contextual chat will use the map's nodes/labels as a minimal source.)`;
+
+              // Only show toast if chat is enabled via fallback
+              if (loadedSourceContent.length > 0) {
+                toast({
+                  title: "Contextual Chat Enabled",
+                  description:
+                    "Using map nodes/labels as a minimal RAG context for this older map.",
+                  variant: "default",
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Error parsing mapData for fallback context:", e);
+          }
         }
+
+        // Set state with the loaded content
+        setMindMapSourceContent(loadedSourceContent);
 
         const parsedMapData = {
           ...fetchedMapData,
@@ -201,7 +229,7 @@ function WorkspaceContent() {
         mapData: JSON.stringify(mapDataToSave.nodes),
         nodeCount: mapDataToSave.nodes.length,
         isSaved: true,
-        // Save the source content alongside the map
+        // CORRECT: Ensure sourcePayload is SAVED
         sourcePayload: mindMapSourceContent,
       };
       delete (mapToSave as any).root;
@@ -212,7 +240,7 @@ function WorkspaceContent() {
         `users/${user.uid}/mindmaps`,
         mapToSave.mapId
       );
-      await setDocumentNonBlocking(docRef, mapToSave, { merge: true }); // Awaiting fix added here
+      await setDocumentNonBlocking(docRef, mapToSave, { merge: true });
 
       setMindMapData((prev) => (prev ? { ...prev, isSaved: true } : null));
       return true;
@@ -296,7 +324,7 @@ function WorkspaceContent() {
   );
 
   // -----------------------------------------------------------
-  // 💡 PRESENTATION MODE HANDLERS AND EFFECTS
+  // 💡 PRESENTATION MODE HANDLERS AND EFFECTS (Unchanged)
   // -----------------------------------------------------------
 
   const handleStopPresentation = useCallback(() => {
@@ -412,9 +440,9 @@ function WorkspaceContent() {
 
     if (isPresentationMode) handleStopPresentation();
 
-    // --- CHATBOT FEATURE: CAPTURE SOURCE CONTENT ---
+    // --- CAPTURE SOURCE CONTENT ---
     setMindMapSourceContent(payload);
-    // ----------------------------------------------
+    // ----------------------------
 
     setIsGenerating(true);
     setSelectedNode(null);
@@ -480,9 +508,9 @@ function WorkspaceContent() {
 
       if (!textContent) throw new Error("Could not extract text from PDF.");
 
-      // --- CHATBOT FEATURE: CAPTURE SOURCE CONTENT ---
+      // --- CAPTURE SOURCE CONTENT ---
       setMindMapSourceContent(textContent);
-      // ----------------------------------------------
+      // ----------------------------
 
       const result = await generateMindMapFromInput({
         inputType: "file",
@@ -675,7 +703,7 @@ function WorkspaceContent() {
         />
       </div>
 
-      {/* --- NEW: FLOATING CHAT BUTTON --- */}
+      {/* --- FLOATING CHAT BUTTON (Opens Modal) --- */}
       {mindMapData && (
         <div className="fixed bottom-6 right-6 z-50">
           <Button
@@ -684,13 +712,14 @@ function WorkspaceContent() {
             variant="default"
             size="icon"
             title="Open Contextual Chat"
+            disabled={!mindMapSourceContent} // Disables if context fallback failed
           >
             <MessageSquare className="h-6 w-6 text-white" />
           </Button>
         </div>
       )}
 
-      {/* --- NEW: CONTEXTUAL CHAT MODAL --- */}
+      {/* --- CONTEXTUAL CHAT MODAL (Rendered Here) --- */}
       <ChatModal
         isOpen={isChatModalOpen}
         setIsOpen={setIsChatModalOpen}

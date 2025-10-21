@@ -8,8 +8,8 @@
 
 import { ai } from "@/ai/genkit";
 import { z } from "genkit";
-// You will need to define this type in src/lib/types.ts (see section 2)
-// import { MindMapContextChatOutput } from '@/lib/types';
+
+// --- TYPE DEFINITIONS (Simplified - Removed ChatMessage and chatHistory) ---
 
 // 1. Define Input Schema for the Flow
 const MindMapContextChatInputSchema = z.object({
@@ -30,7 +30,6 @@ export type MindMapContextChatInput = z.infer<
 >;
 
 // 2. Define Output Schema for the Flow
-// The output is a simple text string, so we wrap it in an object for Genkit compatibility.
 const MindMapContextChatOutputSchema = z.object({
   text: z
     .string()
@@ -55,6 +54,7 @@ Context:
 User Question: {{{userQuestion}}}`;
 
 // 4. Define the Prompt and Flow using Genkit
+// NOTE: We switch back to definePrompt/defineFlow pattern for maximum stability
 const mindMapContextChatPrompt = ai.definePrompt({
   name: "mindMapContextChatPrompt",
   input: { schema: MindMapContextChatInputSchema },
