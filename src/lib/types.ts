@@ -1,3 +1,7 @@
+import {
+  MindMapContextChatInput,
+  MindMapContextChatOutput,
+} from "@/ai/flows/mindmap-context-chat";
 export interface HierarchicalMapNode {
   id: string;
   label: string;
@@ -72,3 +76,4 @@ export interface SummarizeSelectedNodeOutput {
   analogy: string;
   imageUrl: string | null; // 💡 ADDED FIELD for AI-generated image
 }
+export type { MindMapContextChatInput, MindMapContextChatOutput };
