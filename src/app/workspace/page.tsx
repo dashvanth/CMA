@@ -27,14 +27,14 @@ import { useFirebase, useMemoFirebase, useDoc, useNotes } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import * as d3 from "d3-hierarchy";
-import { ChatModal } from "@/components/cma/ChatModal"; // <--- FIXED: Ensure this import is present
+import { ChatModal } from "@/components/cma/ChatModal"; // CORRECT: ChatModal imported
 import { Button } from "@/components/ui/button";
 
 if (typeof window !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 }
 
-// --- HELPER FUNCTION: Build D3 Hierarchy ---
+// ... (buildHierarchy and processAndSetMindMapData functions remain the same)
 const buildHierarchy = (
   nodes: GenerateMindMapOutput["nodes"]
 ): HierarchicalMapNode | null => {
@@ -74,7 +74,6 @@ const buildHierarchy = (
   return rootNode;
 };
 
-// --- HELPER FUNCTION: Process and Set Data ---
 const processAndSetMindMapData = (
   result: GenerateMindMapOutput | null
 ): MindMapData | null => {
@@ -87,7 +86,6 @@ const processAndSetMindMapData = (
   }
 };
 
-// --- HELPER FUNCTION: Download File ---
 const downloadFile = (dataUrl: string, fileName: string) => {
   const link = document.createElement("a");
   link.href = dataUrl;
@@ -98,7 +96,6 @@ const downloadFile = (dataUrl: string, fileName: string) => {
   URL.revokeObjectURL(dataUrl);
 };
 
-// --- HELPER FUNCTION: Image Filter ---
 const filter = (node: HTMLElement) => {
   if (
     node.tagName === "LINK" &&
@@ -109,6 +106,7 @@ const filter = (node: HTMLElement) => {
   }
   return true;
 };
+// ... (downloadFile and filter functions remain the same)
 
 function WorkspaceContent() {
   const searchParams = useSearchParams();
@@ -129,7 +127,7 @@ function WorkspaceContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
-  // --- CHATBOT STATE (RAG Source Content) ---
+  // --- CHATBOT STATE (Reinstated) ---
   const [mindMapSourceContent, setMindMapSourceContent] = useState<string>("");
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   // ----------------------------------
@@ -156,43 +154,7 @@ function WorkspaceContent() {
     return hierarchy.descendants().map((d) => d.data as HierarchicalMapNode);
   }, [mindMapData]);
 
-  // --- NEW: Helper function to extract hierarchical context (memoized) ---
-  const useNodeContext = useCallback(
-    (targetNodeId: string) => {
-      if (!mindMapData?.root) {
-        return { ancestorNodes: "", siblingNodes: "" };
-      }
-
-      const hierarchy = d3.hierarchy(mindMapData.root, (d) => d.children || []);
-      const targetDescendant = hierarchy
-        .descendants()
-        .find((d) => d.data.id === targetNodeId);
-
-      if (!targetDescendant) {
-        return { ancestorNodes: "", siblingNodes: "" };
-      }
-
-      // Gather Ancestor Labels (excluding the root node and the target node itself)
-      const ancestorLabels = targetDescendant
-        .ancestors()
-        .slice(1, -1) // Exclude root (index 0) and the current node (last index)
-        .map((d) => d.data.label);
-
-      // Gather Sibling Labels (excluding the target node)
-      const siblingLabels = (targetDescendant.parent?.children || [])
-        .filter((d) => d.data.id !== targetNodeId)
-        .map((d) => d.data.label);
-
-      return {
-        ancestorNodes: ancestorLabels.join(", "),
-        siblingNodes: siblingLabels.join(", "),
-      };
-    },
-    [mindMapData] // Recalculate only when mindMapData changes
-  );
-  // ---------------------------------------------------------------------
-
-  // 🔥 Context Loading and Fallback Logic for Legacy Maps (remains the same)
+  // 🔥 FIX: Context Loading and Fallback Logic for Legacy Maps
   useEffect(() => {
     if (fetchedMapData) {
       try {
@@ -251,7 +213,6 @@ function WorkspaceContent() {
     }
   }, [fetchedMapData, toast]);
 
-  // ... (handleSave and handleMindMapData remain the same)
   const handleSave = async (mapDataToSave: MindMapData) => {
     if (!user || !firestore) {
       toast({
@@ -320,15 +281,11 @@ function WorkspaceContent() {
     }
   };
 
-  // --- UPDATED generateSummary WITH RAG CONTEXT ---
   const generateSummary = useCallback(
-    // 💡 Function signature includes all RAG context fields
+    // 💡 FIX 1: Added mindMapTitle as an explicit required argument
     async (
       node: HierarchicalMapNode,
       mindMapTitle: string,
-      ancestorNodes: string,
-      siblingNodes: string,
-      sourceContent: string,
       detailLevel: "detailed" | "simplest"
     ) => {
       if (!node) return;
@@ -337,11 +294,8 @@ function WorkspaceContent() {
         const result = await summarizeSelectedNode({
           nodeId: node.id,
           label: node.label,
-          mindmapTitle: mindMapTitle,
+          mindmapTitle: mindMapTitle, // 💡 FIX 2: Passed the new required field
           detailLevel: detailLevel,
-          ancestorNodes: ancestorNodes, // <--- RAG CONTEXT
-          siblingNodes: siblingNodes, // <--- RAG CONTEXT
-          sourceContent: sourceContent, // <--- RAG CONTEXT
         });
         setSummary(result);
         return result;
@@ -350,14 +304,14 @@ function WorkspaceContent() {
         toast({
           variant: "destructive",
           title: "Summary Failed",
-          description:
-            "Could not generate the contextual summary for the selected node.",
+          description: "Could not generate the summary for the selected node.",
         });
         setSummary(null);
       } finally {
         setIsLoadingSummary(false);
       }
     },
+    // toast is in dependencies for toast, other state setters are stable
     [toast]
   );
 
@@ -371,23 +325,12 @@ function WorkspaceContent() {
       setSelectedNode(node);
       setSummary(null);
 
+      // 💡 FIX 3: Get mindMapData title and check if it exists
       const mapTitle = mindMapData?.title;
-      const sourceContent = mindMapSourceContent;
 
-      // 💡 Calculate the hierarchical context
-      const { ancestorNodes, siblingNodes } = useNodeContext(node?.id || "");
-
-      // Check if all necessary context is available
       if (node?.id && node.label && mapTitle) {
-        // 💡 Pass all required arguments to generateSummary
-        await generateSummary(
-          node,
-          mapTitle,
-          ancestorNodes,
-          siblingNodes,
-          sourceContent,
-          "detailed"
-        );
+        // 💡 FIX 4: Pass the mind map title to generateSummary
+        await generateSummary(node, mapTitle, "detailed");
       } else if (node) {
         // Log error if node is selected but context is missing
         console.error(
@@ -397,22 +340,16 @@ function WorkspaceContent() {
           variant: "destructive",
           title: "Summary Blocked",
           description:
-            "Mind map title/root is missing. Cannot generate contextual summary.",
+            "Mind map title is missing. Cannot generate contextual summary.",
         });
       }
     },
-    [
-      generateSummary,
-      isPresentationMode,
-      mindMapData?.title,
-      mindMapSourceContent,
-      useNodeContext,
-      toast,
-    ]
+    // 💡 FIX 5: Added mindMapData (for title) and toast to dependencies
+    [generateSummary, isPresentationMode, mindMapData, toast]
   );
 
   // -----------------------------------------------------------
-  // 💡 PRESENTATION MODE HANDLERS AND EFFECTS
+  // 💡 PRESENTATION MODE HANDLERS AND EFFECTS (Unchanged)
   // -----------------------------------------------------------
 
   const handleStopPresentation = useCallback(() => {
@@ -463,26 +400,13 @@ function WorkspaceContent() {
     }
 
     const nodeToPresent = orderedNodes[currentPresentationIndex];
-    const mapTitle = mindMapData?.title;
-    const sourceContent = mindMapSourceContent;
+    const mapTitle = mindMapData?.title; // 💡 FIX: Get map title for context
 
-    // 💡 Calculate the hierarchical context for the node to present
-    const { ancestorNodes, siblingNodes } = useNodeContext(nodeToPresent.id);
-
-    // Check that necessary context exists before calling generateSummary
+    // 💡 FIX: Check that the map title exists before calling generateSummary
     if (nodeToPresent && nodeToPresent.id !== selectedNode?.id && mapTitle) {
       setSelectedNode(nodeToPresent);
       setSummary(null);
-
-      // 💡 Pass all RAG context fields to generateSummary
-      generateSummary(
-        nodeToPresent,
-        mapTitle,
-        ancestorNodes,
-        siblingNodes,
-        sourceContent,
-        "detailed"
-      );
+      generateSummary(nodeToPresent, mapTitle, "detailed"); // 💡 FIX: Pass mapTitle
     }
   }, [
     isPresentationMode,
@@ -490,12 +414,10 @@ function WorkspaceContent() {
     orderedNodes,
     generateSummary,
     selectedNode,
-    mindMapData?.title,
-    mindMapSourceContent,
-    useNodeContext,
+    mindMapData?.title, // 💡 FIX: Added mapTitle as dependency
   ]);
 
-  // 💡 EFFECT 2: Auto-Advance Logic (Watches TTS state - remains the same)
+  // 💡 EFFECT 2: Auto-Advance Logic (Watches TTS state)
   useEffect(() => {
     // Only run if we are in presentation mode and the narration just stopped
     if (isPresentationMode && !isSpeaking && !isLoadingSummary) {
@@ -827,7 +749,7 @@ function WorkspaceContent() {
       )}
 
       {/* --- CONTEXTUAL CHAT MODAL (Rendered Here) --- */}
-      <ChatModal // <--- This component is now correctly imported and used
+      <ChatModal
         isOpen={isChatModalOpen}
         setIsOpen={setIsChatModalOpen}
         mindMapContext={mindMapSourceContent}
