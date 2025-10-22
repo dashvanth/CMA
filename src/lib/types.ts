@@ -74,6 +74,6 @@ export interface SummarizeSelectedNodeOutput {
   tl_dr: string;
   detailed: string;
   analogy: string;
-  imageUrl: string | null; // 💡 ADDED FIELD for AI-generated image
+  // imageUrl: string | null; <--- REMOVED
 }
 export type { MindMapContextChatInput, MindMapContextChatOutput };

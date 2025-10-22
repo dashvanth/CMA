@@ -34,6 +34,7 @@ if (typeof window !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 }
 
+// ... (buildHierarchy and processAndSetMindMapData functions remain the same)
 const buildHierarchy = (
   nodes: GenerateMindMapOutput["nodes"]
 ): HierarchicalMapNode | null => {
@@ -105,6 +106,7 @@ const filter = (node: HTMLElement) => {
   }
   return true;
 };
+// ... (downloadFile and filter functions remain the same)
 
 function WorkspaceContent() {
   const searchParams = useSearchParams();
@@ -280,13 +282,19 @@ function WorkspaceContent() {
   };
 
   const generateSummary = useCallback(
-    async (node: HierarchicalMapNode, detailLevel: "detailed" | "simplest") => {
+    // 💡 FIX 1: Added mindMapTitle as an explicit required argument
+    async (
+      node: HierarchicalMapNode,
+      mindMapTitle: string,
+      detailLevel: "detailed" | "simplest"
+    ) => {
       if (!node) return;
       setIsLoadingSummary(true);
       try {
         const result = await summarizeSelectedNode({
           nodeId: node.id,
           label: node.label,
+          mindmapTitle: mindMapTitle, // 💡 FIX 2: Passed the new required field
           detailLevel: detailLevel,
         });
         setSummary(result);
@@ -303,6 +311,7 @@ function WorkspaceContent() {
         setIsLoadingSummary(false);
       }
     },
+    // toast is in dependencies for toast, other state setters are stable
     [toast]
   );
 
@@ -316,11 +325,27 @@ function WorkspaceContent() {
       setSelectedNode(node);
       setSummary(null);
 
-      if (node?.id && node.label) {
-        await generateSummary(node, "detailed");
+      // 💡 FIX 3: Get mindMapData title and check if it exists
+      const mapTitle = mindMapData?.title;
+
+      if (node?.id && node.label && mapTitle) {
+        // 💡 FIX 4: Pass the mind map title to generateSummary
+        await generateSummary(node, mapTitle, "detailed");
+      } else if (node) {
+        // Log error if node is selected but context is missing
+        console.error(
+          "Cannot generate summary: MindMapData or title is missing."
+        );
+        toast({
+          variant: "destructive",
+          title: "Summary Blocked",
+          description:
+            "Mind map title is missing. Cannot generate contextual summary.",
+        });
       }
     },
-    [generateSummary, isPresentationMode]
+    // 💡 FIX 5: Added mindMapData (for title) and toast to dependencies
+    [generateSummary, isPresentationMode, mindMapData, toast]
   );
 
   // -----------------------------------------------------------
@@ -375,10 +400,13 @@ function WorkspaceContent() {
     }
 
     const nodeToPresent = orderedNodes[currentPresentationIndex];
-    if (nodeToPresent && nodeToPresent.id !== selectedNode?.id) {
+    const mapTitle = mindMapData?.title; // 💡 FIX: Get map title for context
+
+    // 💡 FIX: Check that the map title exists before calling generateSummary
+    if (nodeToPresent && nodeToPresent.id !== selectedNode?.id && mapTitle) {
       setSelectedNode(nodeToPresent);
       setSummary(null);
-      generateSummary(nodeToPresent, "detailed");
+      generateSummary(nodeToPresent, mapTitle, "detailed"); // 💡 FIX: Pass mapTitle
     }
   }, [
     isPresentationMode,
@@ -386,6 +414,7 @@ function WorkspaceContent() {
     orderedNodes,
     generateSummary,
     selectedNode,
+    mindMapData?.title, // 💡 FIX: Added mapTitle as dependency
   ]);
 
   // 💡 EFFECT 2: Auto-Advance Logic (Watches TTS state)

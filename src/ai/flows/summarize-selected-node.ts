@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * @fileOverview Summarizes a selected node, providing TL;DR, detailed, analogy, and a conceptual image.
+ * @fileOverview Summarizes a selected node, providing TL;DR, detailed, and analogy, with full mindmap context.
  */
 
 import { ai } from "@/ai/genkit";
@@ -9,7 +9,10 @@ import { z } from "genkit";
 
 const SummarizeSelectedNodeInputSchema = z.object({
   nodeId: z.string().describe("The ID of the node to summarize."),
-  label: z.string().describe("The label of the node."),
+  label: z.string().describe("The label of the node to be summarized."),
+  mindmapTitle: z
+    .string()
+    .describe("The main topic/title of the mindmap (e.g., 'Agentic AI')."), // <--- ADDED CONTEXT FIELD
   detailLevel: z
     .enum(["detailed", "simplest"])
     .default("detailed")
@@ -20,18 +23,20 @@ export type SummarizeSelectedNodeInput = z.infer<
   typeof SummarizeSelectedNodeInputSchema
 >;
 
-// 💡 UPDATED OUTPUT SCHEMA TO INCLUDE imageUrl
+// OUTPUT SCHEMA: Removed 'imageUrl' as requested.
 const SummarizeSelectedNodeOutputSchema = z.object({
-  tl_dr: z.string().describe("A short, ≤ 2 sentences, max 28 words summary."),
+  tl_dr: z
+    .string()
+    .describe("A short, concise, high-level summary (max 28 words)."),
   detailed: z
     .string()
-    .describe("1–3 concise paragraphs summary, may include bullet points."),
-  analogy: z.string().describe("1–2 short analogies using everyday examples."),
-  imageUrl: z
-    .string()
-    .nullable()
     .describe(
-      "The data URL or public URL of the AI-generated conceptual image."
+      "1–3 concise paragraphs summarizing the concept in detail, using a professional tone. May include bullet points or numbered lists."
+    ),
+  analogy: z
+    .string()
+    .describe(
+      "1–2 short, creative analogies using common, everyday examples to explain the concept."
     ),
 });
 
@@ -56,18 +61,19 @@ const summarizeSelectedNodeTextPrompt = ai.definePrompt({
       analogy: z.string(),
     }),
   },
-  prompt: `You are CMA (Cognitive Mindmap Assistant) Backend Assistant. You are an expert at summarizing complex topics.
+  prompt: `You are CMA (Cognitive Mindmap Assistant) Backend Assistant. Your expertise is in generating advanced, highly contextual summaries for mindmap nodes.
 
-You will be provided with a node label from a mindmap, and you will generate a TL;DR, a detailed summary, and an analogy for the concept. The detailLevel is {{{detailLevel}}}.
+Primary Context (Mindmap Topic): **{{{mindmapTitle}}}**
+Node to Summarize: **{{{label}}}**
+Detail Level: {{{detailLevel}}}
 
-Node Label: {{{label}}}
+Your task is to generate a comprehensive summary for the 'Node to Summarize' in the direct context of the 'Primary Context'. Do not give a generic definition.
 
-Output a JSON object with the following keys:
-- tl_dr: A short, ≤ 2 sentences, max 28 words summary.
-- detailed: 1–3 concise paragraphs summary, may include bullet points.
-- analogy: 1–2 short analogies using everyday examples.
+Output a structured JSON object with the following keys, strictly adhering to the requested style and format:
+- tl_dr: A short, concise, high-level summary (max 28 words). Must clearly relate to the 'Primary Context'.
+- detailed: 1–3 concise paragraphs summarizing the concept in detail, using a professional tone. It must explain the concept's relationship to the overall mindmap topic.
+- analogy: 1–2 short, creative analogies using common, everyday examples to explain the concept to a beginner.
 
-Ensure that the summaries are context-aware and relevant to the node label provided.
 `,
   config: {
     safetySettings: [
@@ -81,7 +87,6 @@ Ensure that the summaries are context-aware and relevant to the node label provi
   },
 });
 
-// 💡 UPDATED FLOW TO CALL BOTH TEXT AND IMAGE MODELS
 const summarizeSelectedNodeFlow = ai.defineFlow(
   {
     name: "summarizeSelectedNodeFlow",
@@ -89,45 +94,12 @@ const summarizeSelectedNodeFlow = ai.defineFlow(
     outputSchema: SummarizeSelectedNodeOutputSchema,
   },
   async (input) => {
-    const { label } = input;
-
     // 1. Generate Text Summary (Run Text Prompt)
     const { output: summaryData } = await summarizeSelectedNodeTextPrompt(
       input
     );
 
-    // 2. Generate Image (New Logic)
-    let imageUrl: string | null = null;
-    const imagePrompt = `A minimalist, abstract, conceptual illustration of the idea: ${label}. Clean white background, simple vector art style, wide aspect ratio.`;
-
-    try {
-      // Use ai.generateImages with an image model (Imagen 3.0 is recommended via Google AI)
-      const imageResponse = await ai.generateImages({
-        model: "imagen-3.0-generate-002",
-        prompt: imagePrompt,
-        config: {
-          numberOfImages: 1,
-          outputMimeType: "image/jpeg",
-          imageSize: "1024x1024",
-        },
-      });
-
-      if (
-        imageResponse.generatedImages &&
-        imageResponse.generatedImages.length > 0
-      ) {
-        // The result will contain the accessible URL (often a data:image/...)
-        imageUrl = imageResponse.generatedImages[0].url || null;
-      }
-    } catch (e) {
-      // If image generation fails (e.g., content violation, API error), proceed without the image
-      console.error(`Image generation failed for node "${label}":`, e);
-    }
-
-    // 3. Return Combined Result
-    return {
-      ...summaryData,
-      imageUrl,
-    } as SummarizeSelectedNodeOutput; // Cast to final type
+    // 2. Return the text result directly.
+    return summaryData as SummarizeSelectedNodeOutput; // Cast to final type
   }
 );
