@@ -1,4 +1,4 @@
-'use server';
+"use server";
 /**
  * @fileOverview Generates a mind map from text, file, or voice input.
  *
@@ -7,14 +7,13 @@
  * - GenerateMindMapOutput - The return type for the generateMindMapFromInput function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
-import { GenerateMindMapOutput } from '@/lib/types';
-
+import { ai } from "@/ai/genkit";
+import { z } from "genkit";
+import { GenerateMindMapOutput } from "@/lib/types";
 
 const NodeSchema = z.object({
-  id: z.string().min(1, { message: 'Node ID cannot be empty.' }),
-  label: z.string().min(1, { message: 'Node label cannot be empty.' }),
+  id: z.string().min(1, { message: "Node ID cannot be empty." }),
+  label: z.string().min(1, { message: "Node label cannot be empty." }),
   parentId: z.string().optional(),
 });
 
@@ -27,18 +26,18 @@ const GenerateMindMapOutputSchema = z.object({
 });
 
 const GenerateMindMapInputSchema = z.object({
-  inputType: z.enum(['text', 'file', 'audio']),
+  inputType: z.enum(["text", "file", "audio"]),
   payload: z
     .string()
     .describe(
-      'The text, file content, or audio transcription to generate a mind map from.'
+      "The text, file content, or audio transcription to generate a mind map from."
     ),
   options: z
     .object({
       detailLevel: z
-        .enum(['detailed', 'simplest'])
-        .default('detailed')
-        .describe('The level of detail to include in the mind map summaries.'),
+        .enum(["detailed", "simplest"])
+        .default("detailed")
+        .describe("The level of detail to include in the mind map summaries."),
     })
     .default({}),
 });
@@ -74,31 +73,31 @@ Now, generate a complete mind map for the following input as a flat list of node
 User: {{{payload}}}`;
 
 const generateMindMapPrompt = ai.definePrompt({
-  name: 'generateMindMapPrompt',
-  input: {schema: GenerateMindMapInputSchema},
-  output: {schema: GenerateMindMapOutputSchema},
+  name: "generateMindMapPrompt",
+  input: { schema: GenerateMindMapInputSchema },
+  output: { schema: GenerateMindMapOutputSchema },
   prompt: llmPromptTemplate,
 });
 
 const generateMindMapFromInputFlow = ai.defineFlow(
   {
-    name: 'generateMindMapFromInputFlow',
+    name: "generateMindMapFromInputFlow",
     inputSchema: GenerateMindMapInputSchema,
     outputSchema: GenerateMindMapOutputSchema,
   },
-  async input => {
-    const {output} = await generateMindMapPrompt(input);
+  async (input) => {
+    const { output } = await generateMindMapPrompt(input);
 
     if (output) {
       if (!output.mapId) output.mapId = `map-${Date.now()}`;
       if (!output.title)
         output.title =
-          output.nodes?.find(n => !n.parentId)?.label || 'Untitled Mind Map';
+          output.nodes?.find((n) => !n.parentId)?.label || "Untitled Mind Map";
       if (!output.createdAt) output.createdAt = new Date().toISOString();
       if (!output.exportMeta) {
         output.exportMeta = {
-          exportedBy: 'CMA-ai-fallback',
-          mode: 'full',
+          exportedBy: "CMA-ai-fallback",
+          mode: "full",
           oneDayModeApplied: false,
         };
       }
