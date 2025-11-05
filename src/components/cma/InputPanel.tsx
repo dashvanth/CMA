@@ -10,9 +10,9 @@ import {
   Loader2,
   Presentation,
   StopCircle,
-  Sparkles, // FIX: Imported Sparkles
+  Sparkles,
   Mic,
-  File as FileIcon,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,12 +25,9 @@ import {
 import { MindMapData } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Textarea } from "../ui/textarea";
-import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
-import { Label } from "../ui/label";
-import { Input } from "../ui/input";
-import { useState, useRef } from "react"; // FIX: Imported useState and useRef
+import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Separator } from "../ui/separator";
+import { Card, CardHeader, CardTitle, CardContent } from "../ui/card"; // Kept Card imports for utility, but not used for the fixed bar styling directly
 
 interface InputPanelProps {
   onGenerate: (payload: string) => void;
@@ -73,6 +70,7 @@ export function InputPanel({
   const handleGenerateClick = () => {
     if (textInput.trim()) {
       onGenerate(textInput);
+      setTextInput(""); // Clear input after triggering generation
     }
   };
 
@@ -99,128 +97,138 @@ export function InputPanel({
   };
 
   return (
-    <div className="w-96 shrink-0 h-full flex flex-col gap-4">
-      <Card className="flex-1 flex flex-col">
-        <CardHeader>
-          <CardTitle>Generate New Map</CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 flex flex-col gap-4">
-          <div className="flex-1">
-            <Label htmlFor="text-input" className="mb-2 block">
-              Enter Text or Upload PDF
-            </Label>
-            <Textarea
-              id="text-input"
-              placeholder="Paste text here to generate a mind map..."
-              value={textInput}
-              onChange={handleTextareaChange}
-              rows={8}
-              disabled={isAnyActionPending || isPresentationMode}
-            />
-            <Button
-              className="w-full mt-2"
-              onClick={handleGenerateClick}
-              disabled={
-                !textInput.trim() || isAnyActionPending || isPresentationMode
+    // Root div now has the fixed positioning and Glass-Morphism effect
+    <div
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 
+                 w-full max-w-6xl z-40 px-8 py-4 mb-4 
+                 rounded-2xl backdrop-blur-xl bg-card/70 
+                 shadow-2xl border border-border/50 
+                 transition-all duration-300 ease-in-out"
+    >
+      {/* Input Bar Content */}
+      <div className="flex w-full items-end gap-3">
+        {/* FILE UPLOAD / MIC BUTTONS (Left Side) */}
+        <div className="flex items-center gap-2 mb-1 shrink-0">
+          {/* PDF UPLOAD BUTTON */}
+          <input
+            id="pdf-file"
+            type="file"
+            name="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            accept=".pdf"
+            disabled={isAnyActionPending || isPresentationMode}
+          />
+          <Button
+            variant="outline"
+            className="h-14 w-14 p-0 shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isAnyActionPending || isPresentationMode}
+            title={isUploading ? "Uploading PDF..." : "Upload PDF"}
+          >
+            {isUploading ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : (
+              <Upload className="h-5 w-5" />
+            )}
+          </Button>
+
+          {/* VOICE BUTTON (Placeholder for future feature) */}
+          <Button
+            variant="outline"
+            className="h-14 w-14 p-0 shrink-0"
+            disabled={isLoading || isPresentationMode}
+            title="Use Voice (Future Feature)"
+          >
+            <Mic className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* TEXT AREA AND GENERATE BUTTON (Center - Flex Grow) */}
+        <div className="flex-grow min-w-0 relative">
+          <Textarea
+            id="text-input"
+            placeholder="Paste text or type your concept here to generate a mind map..."
+            value={textInput}
+            onChange={handleTextareaChange}
+            rows={2} // Reduced rows for compact look
+            className="min-h-[56px] resize-none pr-16" // Added pr-16 for the spark button
+            disabled={isAnyActionPending || isPresentationMode}
+            onKeyDown={(e) => {
+              // Submit on Enter key press without Shift key
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                textInput.trim() &&
+                !isAnyActionPending
+              ) {
+                e.preventDefault();
+                handleGenerateClick();
               }
-            >
-              {isGenerating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
-              )}
-              {isGenerating ? "Generating..." : "Generate from Text"}
-            </Button>
-          </div>
-          <Separator />
-          {/* PDF UPLOAD SECTION */}
-          <div className="space-y-2">
-            <Label htmlFor="pdf-file" className="mb-2 block">
-              Upload PDF File
-            </Label>
-            <input
-              id="pdf-file"
-              type="file"
-              name="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              accept=".pdf"
-              disabled={isAnyActionPending || isPresentationMode}
-            />
+            }}
+          />
+          {/* Sparkles button positioned absolutely inside the Textarea */}
+          <Button
+            className="absolute right-4 bottom-[20px] h-10 w-10 p-0"
+            onClick={handleGenerateClick}
+            disabled={
+              !textInput.trim() || isAnyActionPending || isPresentationMode
+            }
+            variant="default"
+            size="icon"
+            title={isGenerating ? "Generating..." : "Generate Mind Map"}
+          >
+            {isGenerating ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Sparkles className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
+
+        {/* CONTROLS (Right Side - Horizontal Buttons for desktop) */}
+        {isMindMapPresent && (
+          <div className="flex items-center gap-2 mb-1 shrink-0">
+            {/* PRESENTATION BUTTON */}
             <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isAnyActionPending || isPresentationMode}
+              variant={isPresentationMode ? "destructive" : "secondary"}
+              className={cn(
+                "h-14 w-32 p-3 text-sm",
+                isPresentationMode && "bg-destructive hover:bg-destructive/90"
+              )}
+              onClick={onTogglePresentation}
+              disabled={isAnyActionPending}
             >
-              {isUploading ? (
+              {isPresentationMode ? (
+                <StopCircle className="mr-2 h-4 w-4" />
+              ) : (
+                <Presentation className="mr-2 h-4 w-4" />
+              )}
+              {isPresentationMode ? "Exit" : "Present"}
+            </Button>
+
+            {/* SAVE BUTTON */}
+            <Button
+              variant="secondary"
+              className="h-14 w-28 p-3 text-sm"
+              onClick={onSave}
+              disabled={!isMindMapPresent || isSaving || isAnyActionPending}
+            >
+              {isSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <FileIcon className="mr-2 h-4 w-4" />
+                <Save className="mr-2 h-4 w-4" />
               )}
-              {isUploading ? "Uploading..." : "Upload PDF"}
+              {isSaving ? "Saving..." : mindMapData?.isSaved ? "Saved" : "Save"}
             </Button>
-          </div>
-
-          <div className="flex gap-2 mt-auto">
-            {/* Keeping the Mic button as a placeholder for future voice command features */}
-            <Button variant="outline" className="flex-1" disabled={isLoading}>
-              <Mic className="mr-2 h-4 w-4" /> Use Voice
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* MindMapControls logic is inlined here */}
-      {isMindMapPresent && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex gap-2 mb-2">
-              {/* PRESENTATION BUTTON */}
-              <Button
-                variant={isPresentationMode ? "destructive" : "secondary"}
-                className={cn(
-                  "w-full",
-                  isPresentationMode && "bg-destructive hover:bg-destructive/90"
-                )}
-                onClick={onTogglePresentation}
-                disabled={isAnyActionPending}
-              >
-                {isPresentationMode ? (
-                  <StopCircle className="mr-2 h-4 w-4" />
-                ) : (
-                  <Presentation className="mr-2 h-4 w-4" />
-                )}
-                {isPresentationMode ? "Exit Presentation" : "Present Mode"}
-              </Button>
-
-              {/* SAVE BUTTON */}
-              <Button
-                variant="secondary"
-                className="w-full"
-                onClick={onSave}
-                disabled={!isMindMapPresent || isSaving || isAnyActionPending}
-              >
-                {isSaving ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
-                )}
-                {isSaving
-                  ? "Saving..."
-                  : mindMapData?.isSaved
-                  ? "Saved"
-                  : "Save"}
-              </Button>
-            </div>
 
             {/* EXPORT DROPDOWN */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  className="w-full"
+                  className="h-14 w-28 p-3 text-sm"
                   disabled={isAnyActionPending}
                 >
                   <Download className="mr-2 h-4 w-4" /> Export
@@ -246,9 +254,9 @@ export function InputPanel({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

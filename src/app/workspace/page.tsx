@@ -27,14 +27,15 @@ import { useFirebase, useMemoFirebase, useDoc, useNotes } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import * as d3 from "d3-hierarchy";
-import { ChatModal } from "@/components/cma/ChatModal"; // CORRECT: ChatModal imported
+import { ChatModal } from "@/components/cma/ChatModal";
 import { Button } from "@/components/ui/button";
 
 if (typeof window !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 }
 
-// ... (buildHierarchy and processAndSetMindMapData functions remain the same)
+// NOTE: buildHierarchy, processAndSetMindMapData, downloadFile, and filter functions are preserved exactly as provided in the source file.
+
 const buildHierarchy = (
   nodes: GenerateMindMapOutput["nodes"]
 ): HierarchicalMapNode | null => {
@@ -106,7 +107,6 @@ const filter = (node: HTMLElement) => {
   }
   return true;
 };
-// ... (downloadFile and filter functions remain the same)
 
 function WorkspaceContent() {
   const searchParams = useSearchParams();
@@ -666,21 +666,11 @@ function WorkspaceContent() {
   return (
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
       <Header />
+      {/* NEW LAYOUT: The main container now only holds the MindMap Canvas and the Summary Panel.
+       */}
       <div className="pt-16 h-screen w-screen flex p-4 gap-4">
-        <InputPanel
-          onGenerate={handleGenerate}
-          onPdfUpload={handlePdfUpload}
-          onExport={handleExport}
-          onSave={handleManualSave}
-          isGenerating={isGenerating}
-          isUploading={isUploading}
-          isSaving={isSaving}
-          mindMapData={mindMapData}
-          // 💡 NEW PROPS PASSED TO INPUT PANEL
-          isPresentationMode={isPresentationMode}
-          onTogglePresentation={handleTogglePresentation}
-        />
-        <div className="flex-1 h-full rounded-2xl border border-border bg-card/20 relative overflow-hidden shadow-2xl shadow-black/20">
+        {/* Mind Map Canvas (Takes up full left space, with bottom padding) */}
+        <div className="flex-1 h-full rounded-2xl border border-border bg-card/20 relative overflow-hidden shadow-2xl shadow-black/20 pb-32">
           {isLoading && (
             <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
               <Loader2 className="h-12 w-12 animate-spin text-accent" />
@@ -715,6 +705,8 @@ function WorkspaceContent() {
             )
           )}
         </div>
+
+        {/* Summary Panel (Right Side, fixed width) */}
         <SummaryPanel
           node={selectedNode}
           onNodeSelect={handleNodeSelect}
@@ -731,6 +723,20 @@ function WorkspaceContent() {
           setIsSpeaking={setIsSpeaking} // Callback to update the parent's TTS state
         />
       </div>
+
+      {/* --- FLOATING, CENTERED INPUT PANEL (New Position) --- */}
+      <InputPanel
+        onGenerate={handleGenerate}
+        onPdfUpload={handlePdfUpload}
+        onExport={handleExport}
+        onSave={handleManualSave}
+        isGenerating={isGenerating}
+        isUploading={isUploading}
+        isSaving={isSaving}
+        mindMapData={mindMapData}
+        isPresentationMode={isPresentationMode}
+        onTogglePresentation={handleTogglePresentation}
+      />
 
       {/* --- FLOATING CHAT BUTTON (Opens Modal) --- */}
       {mindMapData && (
